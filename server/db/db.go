@@ -4,14 +4,24 @@ import (
 	"context"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/mileusna/useragent"
 )
 
+type QData struct {
+	geo *GeoInfo
+	ua  useragent.UserAgent
+	trk Tracking
+}
+
 type Events struct {
-	DB *pgx.Conn
+	DB   clickhouse.Conn
+	Ch   chan QData
+	q    []QData
+	lock sync.RWMutex
 }
 
 type TrackingData struct {
@@ -21,7 +31,8 @@ type TrackingData struct {
 	Event         string `json:"event"`
 	Category      string `json:"category"`
 	Referrer      string `json:"referrer"`
-	IsTouchDevice bool   `json:"isTouch"`
+	ReferrerHost  string
+	IsTouchDevice bool `json:"isTouch"`
 }
 
 type Tracking struct {
@@ -41,9 +52,15 @@ type GeoInfo struct {
 }
 
 func (e *Events) Open() error {
-	conn, err := pgx.Connect(
-		context.Background(),
-		"postgres://test:test123@localhost:5432/pyrrhos",
+	conn, err := clickhouse.Open(
+		&clickhouse.Options{
+			Addr: []string{"127.0.0.1:9000"},
+			Auth: clickhouse.Auth{
+				Database: "default",
+				Username: "default",
+				Password: "",
+			},
+		},
 	)
 
 	if err != nil {
@@ -56,30 +73,106 @@ func (e *Events) Open() error {
 	return nil
 }
 
-func (e *Events) Add(trk Tracking, ua useragent.UserAgent, geo *GeoInfo) error {
+func (e *Events) EnsureTable() error {
+	qry := `
+   CREATE TABLE IF NOT EXISTS events (
+   site_id String NOT NULL,
+   occured_at UInt32 NOT NULL,
+   type String NOT NULL,
+   user_id String NOT NULL,
+   event String NOT NULL,
+   category String NOT NULL,
+   referrer String NOT NULL,
+   referrer_domain String NOT NULL,
+   is_touch BOOLEAN NOT NULL,
+   browser_name String NOT NULL,
+   os_name String NOT NULL,
+   device_type String NOT NULL,
+   country String NOT NULL,
+   region String NOT NULL,
+   timestamp DateTime DEFAULT now()
+   )
+   ENGINE MergeTree
+   ORDER BY (site_id, occured_at);
+  `
+	return e.DB.Exec(context.Background(), qry)
+}
+
+func (e *Events) Add(trk Tracking, ua useragent.UserAgent, geo *GeoInfo) {
+	e.Ch <- QData{geo, ua, trk}
+}
+
+func (e *Events) Run() {
+	timer := time.NewTimer(time.Second * 10)
+
+	for {
+		select {
+		case data := <-e.Ch:
+			e.lock.Lock()
+			e.q = append(e.q, data)
+			c := len(e.q)
+			e.lock.Unlock()
+
+			if c >= 15 {
+				if err := e.Insert(); err != nil {
+					log.Println("error while inserting data: ", err)
+				}
+			}
+		case <-timer.C:
+			timer.Reset(time.Second * 10)
+			e.lock.RLock()
+			c := len(e.q)
+			e.lock.RUnlock()
+			if c > 0 {
+				if err := e.Insert(); err != nil {
+					log.Println("error while inserting data: ", err)
+				}
+			}
+		}
+	}
+}
+
+func (e *Events) Insert() error {
+	var tmp []QData
+	e.lock.Lock()
+	tmp = append(tmp, e.q...)
+	e.q = nil
+	e.lock.Unlock()
+
 	query := `INSERT INTO events (
-		site_id, occured_at, type, user_id, event, category, referrer, is_touch, browser_name, os_name, device_type, country, region
+		site_id, occured_at, type, user_id, event, category, referrer, referrer_domain, is_touch, browser_name, os_name, device_type, country, region
 	) VALUES (
-		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 	);`
 
-	_, err := e.DB.Exec(context.Background(), query,
-		trk.SiteID,
-		nowToInt(),
-		trk.Action.Type,
-		trk.Action.Identity,
-		trk.Action.Event,
-		trk.Action.Category,
-		trk.Action.Referrer,
-		trk.Action.IsTouchDevice,
-		ua.Name,
-		ua.OS,
-		ua.Device,
-		geo.Country,
-		geo.RegionName,
-	)
+	batch, err := e.DB.PrepareBatch(context.Background(), query)
+	if err != nil {
+		return err
+	}
 
-	return err
+	for _, qd := range tmp {
+		err := batch.Append(
+			qd.trk.SiteID,
+			nowToInt(),
+			qd.trk.Action.Type,
+			qd.trk.Action.Identity,
+			qd.trk.Action.Event,
+			qd.trk.Action.Category,
+			qd.trk.Action.Referrer,
+			qd.trk.Action.ReferrerHost,
+			qd.trk.Action.IsTouchDevice,
+			qd.ua.Name,
+			qd.ua.OS,
+			qd.ua.Device,
+			qd.geo.Country,
+			qd.geo.RegionName,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return batch.Send()
 }
 
 func nowToInt() uint32 {

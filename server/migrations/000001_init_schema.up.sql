@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS events (
    event String NOT NULL,
    category String NOT NULL,
    referrer String NOT NULL,
+   referrer_domain String NOT NULL,
    is_touch BOOLEAN NOT NULL,
    browser_name String NOT NULL,
    os_name String NOT NULL,
