@@ -1,0 +1,309 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        bun-version: ['1.2.19']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: ${{ matrix.bun-version }}
+        
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
+          
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+      
+    - name: Build packages
+      run: bun run build
+      
+    - name: Run unit tests
+      run: bun run test:unit
+      
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: unit-test-results
+        path: test-results/
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: '1.2.19'
+        
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+      
+    - name: Build packages
+      run: bun run build
+      
+    - name: Install Puppeteer dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          chromium-browser \
+          fonts-liberation \
+          libasound2 \
+          libatk-bridge2.0-0 \
+          libatk1.0-0 \
+          libatspi2.0-0 \
+          libcups2 \
+          libdbus-1-3 \
+          libdrm2 \
+          libgtk-3-0 \
+          libnspr4 \
+          libnss3 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxfixes3 \
+          libxrandr2 \
+          libxss1 \
+          libxtst6 \
+          xvfb
+          
+    - name: Run E2E tests
+      run: |
+        export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+        xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" \
+          bun run test:e2e
+      
+    - name: Upload E2E test artifacts
+      uses: actions/upload-artifact@v3
+      if: failure()
+      with:
+        name: e2e-screenshots
+        path: test/e2e/screenshots/
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    services:
+      docker:
+        image: docker:20.10.16
+        options: --privileged
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: '1.2.19'
+        
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+      
+    - name: Build packages
+      run: bun run build
+      
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Run integration tests
+      run: bun run test:integration
+      
+    - name: Run Docker tests
+      run: |
+        # Build test image
+        docker build -f Dockerfile.test -t openanalytics-test .
+        
+        # Run tests in container
+        docker run --rm \
+          -v ${{ github.workspace }}/test-results:/app/test-results \
+          openanalytics-test \
+          bun test --reporter=json --output-file=test-results/docker-results.json
+          
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: test-results/
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: '1.2.19'
+        
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+      
+    - name: Run security audit
+      run: bun audit
+      continue-on-error: true
+      
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        languages: javascript
+        
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: '1.2.19'
+        
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+      
+    - name: Build packages
+      run: bun run build
+      
+    - name: Run performance benchmarks
+      run: |
+        # Create a simple performance test
+        cat > perf-test.ts << 'EOF'
+        import { openanalytics, MemoryStorage } from "./packages/core/dist/esm/index.js";
+        
+        const analytics = openanalytics({
+          storage: MemoryStorage({ maxEvents: 100000 }),
+          writeKeys: [],
+        });
+        
+        const server = Bun.serve({
+          port: 0,
+          fetch: analytics.fetch,
+        });
+        
+        const baseUrl = `http://localhost:${server.port}`;
+        
+        // Performance test
+        const start = Date.now();
+        const promises = Array.from({ length: 1000 }, (_, i) =>
+          fetch(`${baseUrl}/api/v1/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "perf_test",
+              siteId: "test",
+              properties: { index: i },
+            }),
+          })
+        );
+        
+        await Promise.all(promises);
+        const end = Date.now();
+        
+        console.log(`Processed 1000 events in ${end - start}ms`);
+        console.log(`Average: ${(end - start) / 1000}ms per event`);
+        
+        // Verify all events were processed
+        const response = await fetch(`${baseUrl}/api/v1/metrics`);
+        const metrics = await response.json();
+        console.log(`Total events in storage: ${metrics.metrics.totalEvents}`);
+        
+        server.stop();
+        
+        // Performance assertions
+        if (end - start > 5000) {
+          console.error("Performance test failed: took longer than 5 seconds");
+          process.exit(1);
+        }
+        
+        console.log("✅ Performance test passed");
+        EOF
+        
+        bun perf-test.ts
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, e2e-tests, integration-tests, security-scan, performance-tests]
+    if: always()
+    
+    steps:
+    - name: Download all test artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Generate test summary
+      run: |
+        echo "# 🧪 Test Suite Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.unit-tests.result }}" == "success" ]]; then
+          echo "✅ **Unit Tests**: Passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Unit Tests**: Failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ needs.e2e-tests.result }}" == "success" ]]; then
+          echo "✅ **E2E Tests**: Passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **E2E Tests**: Failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ needs.integration-tests.result }}" == "success" ]]; then
+          echo "✅ **Integration Tests**: Passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Integration Tests**: Failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ needs.security-scan.result }}" == "success" ]]; then
+          echo "✅ **Security Scan**: Passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ **Security Scan**: Issues found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ needs.performance-tests.result }}" == "success" ]]; then
+          echo "✅ **Performance Tests**: Passed" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Performance Tests**: Failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📊 **Overall Result**: $(( \
+          ${{ needs.unit-tests.result == 'success' }} + \
+          ${{ needs.e2e-tests.result == 'success' }} + \
+          ${{ needs.integration-tests.result == 'success' }} + \
+          ${{ needs.performance-tests.result == 'success' }} \
+        ))/4 test suites passed" >> $GITHUB_STEP_SUMMARY

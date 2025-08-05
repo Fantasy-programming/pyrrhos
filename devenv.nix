@@ -1,14 +1,14 @@
 { pkgs,  ... }:
 
 {
-  packages = [ 
+  packages = [
     pkgs.git
   ];
 
   languages.javascript = {
     enable = true;
-    package = pkgs.nodejs-slim_22;
-    pnpm.enable = true;
+    package = pkgs.nodejs-slim_24;
     npm.enable = true;
+    bun.enable = true;
   };
 }

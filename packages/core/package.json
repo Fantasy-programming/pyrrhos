@@ -1,0 +1,46 @@
+{
+  "name": "@pyrrhos/core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Core analytics engine for OpenAnalytics",
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "test": "bun test"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./collector": {
+      "import": "./dist/esm/collector.js",
+      "types": "./dist/types/collector.d.ts"
+    },
+    "./processor": {
+      "import": "./dist/esm/processor.js",
+      "types": "./dist/types/processor.d.ts"
+    },
+    "./ui": {
+      "import": "./dist/esm/ui/index.js",
+      "types": "./dist/types/ui/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "peerDependencies": {
+    "hono": "^4.0.0"
+  },
+  "dependencies": {
+    "@standard-schema/spec": "1.0.0-beta.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20250410.0",
+    "@tsconfig/node23": "23.0.1",
+    "@types/node": "22.14.0",
+    "hono": "4.7.6",
+    "typescript": "5.8.3",
+    "valibot": "1.0.0"
+  }
+}

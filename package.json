@@ -1,18 +1,38 @@
 {
   "name": "pyrrhos",
-  "version": "1.0.0",
-  "description": "",
+  "module": "index.ts",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/client",
+    "packages/storage-*",
+    "packages/adapters/*",
+    "examples/issuer/*",
+    "examples/client/*"
+  ],
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "build": "bun run --filter=\"@pyrrhos/*\" build",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:unit": "bun test packages/*/test/",
+    "test:e2e": "bun test test/e2e/",
+    "test:integration": "bun test test/integration/",
+    "test:docker": "docker build -f Dockerfile.test -t openanalytics-test . && docker run --rm openanalytics-test",
+    "test:all": "bun run test:unit && bun run test:e2e && bun run test:integration",
+    "test:ci": "bun test --reporter=json --output-file=test-results.json",
+    "release": "bun run build && changeset publish"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "packageManager": "pnpm@8.15.6",
-  "engines": {
-    "node": ">=18"
+  "devDependencies": {
+    "@tsconfig/node23": "23.0.1",
+    "@types/bun": "latest",
+    "@changesets/cli": "^2.27.1",
+    "puppeteer": "^22.0.0",
+    "@types/puppeteer": "^7.0.4",
+    "testcontainers": "^10.7.1",
+    "vitest": "^1.6.0",
+    "@vitest/ui": "^1.6.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }

@@ -1,0 +1,33 @@
+{
+  "name": "@pyrrhos/client",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser and server clients for OpenAnalytics",
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "test": "bun test"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/esm/browser.js",
+      "types": "./dist/types/browser.d.ts"
+    },
+    "./server": {
+      "import": "./dist/esm/server.js",
+      "types": "./dist/types/server.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "devDependencies": {
+    "@tsconfig/node23": "23.0.1",
+    "@types/node": "22.14.0",
+    "typescript": "5.8.3"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@pyrrhos/storage-d1",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cloudflare D1 storage adapter for OpenAnalytics",
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "test": "bun test"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "peerDependencies": {
+    "@pyrrhos/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20250410.0",
+    "@tsconfig/node23": "23.0.1",
+    "typescript": "5.8.3"
+  }
+}

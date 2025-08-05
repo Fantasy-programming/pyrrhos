@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "test:e2e": "bun test test/e2e/",
+    "test:integration": "bun test test/integration/",
+    "test:unit": "bun test packages/*/test/",
+    "test:ci": "bun test --reporter=junit --output-dir=test-results/",
+    "test:docker": "docker build -f Dockerfile.test -t openanalytics-test . && docker run --rm openanalytics-test bun test"
+  }
+}

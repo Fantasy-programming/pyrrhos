@@ -1,0 +1,30 @@
+{
+  "name": "@pyrrhos/react",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "React adapter for OpenAnalytics",
+  "scripts": {
+    "build": "bun run script/build.ts",
+    "test": "bun test"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "@pyrrhos/client": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@tsconfig/node23": "23.0.1",
+    "typescript": "5.8.3",
+    "react": "^18.0.0"
+  }
+}
