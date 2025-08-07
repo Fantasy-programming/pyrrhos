@@ -1,6 +1,6 @@
 {
   "name": "@pyrrhos/pyrrhos",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "build": "bun run script/build.ts",
@@ -37,7 +37,30 @@
     "aws4fetch": "1.0.20"
   },
   "files": [
-    "src",
     "dist"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dogma-io/openanalytics.git",
+    "directory": "packages/pyrrhos"
+  },
+  "homepage": "https://github.com/dogma-io/openanalytics#readme",
+  "bugs": {
+    "url": "https://github.com/dogma-io/openanalytics/issues"
+  },
+  "keywords": [
+    "analytics",
+    "openauth",
+    "privacy",
+    "self-hosted",
+    "universal",
+    "cloudflare",
+    "aws",
+    "edge"
+  ],
+  "license": "MIT",
+  "description": "Self-hosted, standards-based analytics platform following the OpenAuth architectural pattern"
 }
